@@ -7,6 +7,7 @@
 *.sln.docstates
 *.sln
 *.csproj
+AssemblyInfo.cs
 
 # Build results
 [Dd]ebug/
