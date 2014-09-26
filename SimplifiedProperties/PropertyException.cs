@@ -6,7 +6,7 @@
  */
 using System;
 
-namespace SimplifiedProperties {
+namespace SMPL.Props {
     /// <summary>
     /// Property exception.
     /// </summary>

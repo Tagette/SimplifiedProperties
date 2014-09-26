@@ -8,7 +8,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace SimplifiedProperties {
+namespace SMPL.Props {
     /// <summary>
     /// A class that manages the file manipulation for the Simplified Properties config system.
     /// </summary>

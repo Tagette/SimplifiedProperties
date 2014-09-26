@@ -7,7 +7,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace SimplifiedProperties {
+namespace SMPL.Props {
     public static class Tools {
         /// <summary>
         /// Gets the alias.

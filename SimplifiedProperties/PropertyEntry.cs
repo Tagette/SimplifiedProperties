@@ -6,7 +6,7 @@
  */
 using System;
 
-namespace SimplifiedProperties {
+namespace SMPL.Props {
     /// <summary>
     /// Property entry.
     /// </summary>
@@ -135,7 +135,7 @@ namespace SimplifiedProperties {
         /// <param name="file">File.</param>
         /// <param name="key">Key.</param>
         /// <param name="value">Value.</param>
-        public PropertyEntry(string @key, string stringValue) 
+        public PropertyEntry(string @key, string stringValue)
             : this(@key, stringValue, string.Empty) {
         }
 
