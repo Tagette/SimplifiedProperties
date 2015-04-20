@@ -2,10 +2,11 @@
  * Author: Tristan Chambers
  * Date: Thursday, November 8, 2013
  * Email: Tristan.Chambers@hotmail.com
- * Website: Tristan.Heroic-Intentions.net
+ * Website: Tristan.PaperHatStudios.com
  */
 using System;
 using System.Collections.Generic;
+using System.Collections;
 
 namespace SMPL.Props {
 	public static class Tools {
@@ -15,18 +16,18 @@ namespace SMPL.Props {
 		/// <returns>The alias.</returns>
 		/// <param name="key">Key.</param>
 		/// <param name="keys">An array of keys.</param>
-		public static string GetAlias (string @key, string[] @keys) {
+        public static string GetAlias (string @key, IEnumerable @keys) {
 			var alias = @key;
 			var count = 2;
 			bool contains = false;
 			do {
 				contains = false;
-				for (int i = 0; i < @keys.Length; i++) {
-					if (@keys [i].Equals (alias)) {
+				foreach(string eachKey in @keys) {
+                    if (eachKey.Equals (alias)) {
 						contains = true;
 						break;
 					}
-				}
+                }
 				if (contains) {
 					alias = @key + count;
 					count++;
@@ -64,6 +65,11 @@ namespace SMPL.Props {
 			}
 			return index;
 		}
+
+        public static bool IsNullEmptyOrWhite(this string value)
+        {
+            return value == null || value.Trim() == string.Empty;
+        }
 	}
 }
 
