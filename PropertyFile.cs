@@ -2,273 +2,233 @@
  * Author: Tristan Chambers
  * Date: Thursday, November 7, 2013
  * Email: Tristan.Chambers@hotmail.com
- * Website: Tristan.Heroic-Intentions.net
+ * Website: Tristan.PaperHatStudios.com
  */
 using System;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 
-namespace SMPL.Props {
-	/// <summary>
-	/// A class that manages the file manipulation for the Simplified Properties config system.
-	/// </summary>
-	public class PropertyFile {
+namespace SMPL.Props
+{
+    /// <summary>
+    /// A class that manages the file manipulation for the Simplified Properties config system.
+    /// </summary>
+    public class PropertyFile
+    {
 
-		#region Properties
+        public const string REGEX_GROUP_START = @"^(?'r'\s*\/\*[ \n]*(?'c'[\s\S]+?)[ \n]*\*\/[ \n]*)";
+        public const string REGEX_GROUP_END = @"^\s*}\s*";
+        public const string REGEX_KEY_VALUE = @"^(?'r'\s*'?(?'k'.+?)'?[ \n]*=[ \n]*'?(?'v'.+?)'?[ \n]*(?:(?:#|\/\/) *(?'c'.*?)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
+        public const string REGEX_ARRAY_VALUE = @"^(?'r'\s*-[ \n]*'(?'v'.+?)'?[ \n]*(?:(?:#|\/\/) *(?'c'.*)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
+        public const string REGEX_COMMENT = @"^(?'r'\s*(?:#|\/\/) *(?'c'.*?))";
+        public const string REGEX_BLOCK_COMMENT = @"^(?'r'\s*\/\*[ \n]*(?'c'[\s\S]+?)[ \n]*\*\/[ \n]*)";
+        public const string REGEX_CONCAT = @"^(?'r'\s*\+[ \n]*'?(?'v'.+?)'?[ \n]*(?:(?:#|\/\/) *(?'c'.*?)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
+        public const string REGEX_NEW_LINE = @"(?<=\n)[ ]*(?'r'\n)";
+        public const string REGEX_INVALID = @"^(?'r'.*)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
 
-		/// <summary>
-		/// Gets the path to the config file.
-		/// </summary>
-		public string Path { 
-			get {
-				return _fileInfo.Directory.FullName;
-			}
-		}
+        #region Properties
 
-		/// <summary>
-		/// Gets the name of the file.
-		/// </summary>
-		public string FileName {
-			get {
-				return _fileInfo.Name;
-			}
-		}
+        /// <summary>
+        /// Gets the path to the config file.
+        /// </summary>
+        public string Path
+        { 
+            get
+            {
+                return _fileInfo.Directory.FullName;
+            }
+        }
 
-		/// <summary>
-		/// Gets the properties.
-		/// </summary>
-		public PropertyList Properties { get; protected set; }
+        /// <summary>
+        /// Gets the name of the file.
+        /// </summary>
+        public string FileName
+        {
+            get
+            {
+                return _fileInfo.Name;
+            }
+        }
 
-		/// <summary>
-		/// Gets or sets whether this <see cref="SimplifiedProperties.PropertyFile"/> loads all of the 
-		/// properties for saving. This prevents entries from being commented when saving.
-		/// </summary>
-		/// <value>If <c>true</c> all entries wil be marked as loaded when they are read.</value>
-		public bool LoadAll { get; set; }
+        /// <summary>
+        /// Gets the properties.
+        /// </summary>
+        public PropertyList Properties { get; protected set; }
 
-		#endregion // Properties
+        /// <summary>
+        /// If true, entries that have not been loaded yet will be commented.
+        /// </summary>
+        public bool CommentUnloadedEntries { get; set; }
 
-		private FileInfo _fileInfo;
-		internal int currentLineNumber = 0;
+        #endregion // Properties
 
-		/// <summary>
-		/// Initializes a new instance of the <see cref="SimplifiedProperties.PropertyFile"/> class.
-		/// If the file does not exist, it will create one.
-		/// </summary>
-		/// <param name="path">The path to the config file.</param>
-		public PropertyFile (string @path) {
-			// Get the file info.
-			_fileInfo = new FileInfo (@path);
-		}
+        private FileInfo _fileInfo;
+        internal int currentLineNumber = 0;
 
-		/// <summary>
-		/// Load the config file and reads it's contents.
-		/// </summary>
-		public void Load () {
-			if (!_fileInfo.Exists)
-				_fileInfo.Create ().Close ();
-			using (TextReader reader = _fileInfo.OpenText ()) {
-				var list = new PropertyList (string.Empty);
-				list.Loaded = true;
-				while (@reader.Peek () != -1) {
-					currentLineNumber++;
-					string line = @reader.ReadLine ().Trim ();
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SimplifiedProperties.PropertyFile"/> class.
+        /// If the file does not exist, it will create one.
+        /// </summary>
+        /// <param name="path">The path to the config file.</param>
+        public PropertyFile(string @path)
+        {
+            // Get the file info.
+            _fileInfo = new FileInfo(@path);
+        }
 
-					PropertyEntry entry = null;
+        /// <summary>
+        /// Load the config file and reads it's contents.
+        /// </summary>
+        public void Load()
+        {
+            if (!_fileInfo.Exists)
+                _fileInfo.Create().Close();
+            using (TextReader reader = _fileInfo.OpenText())
+            {
 
-					if (line.StartsWith ("#") || line.StartsWith ("="))
-						entry = LoadComment (line, list);
-					else
-					if (line.Equals (string.Empty))
-						entry = LoadNewLine (list);
-					else
-					if (line.Contains ("="))
-						entry = LoadEntry (line, list);
-					else
-					if (line.Contains ("{"))
-						entry = LoadList (line, list);
-					else
-					if (line.Contains ("}") && list.Parent != null)
-						list = list.Parent;
-					else
-						entry = LoadComment (line, list);
+                var list = new PropertyList(string.Empty);
+                list.Loaded = true;
 
-					if (entry != null) {
-						entry.LineNumber = currentLineNumber;
-						entry.Loaded = LoadAll;
-						list.AddEntry (entry);
-						if (entry is PropertyList)
-							list = (PropertyList)entry;
-					}
+                Regex groupStartRegex = new Regex(REGEX_GROUP_START);
+                Regex keyValueRegex = new Regex(REGEX_KEY_VALUE);
+                Regex arrayValueRegex = new Regex(REGEX_ARRAY_VALUE);
+                Regex blockCommentRegex = new Regex(REGEX_COMMENT);
+                Regex commentRegex = new Regex(REGEX_COMMENT);
+                Regex concatRegex = new Regex(REGEX_CONCAT);
+                Regex groupEndRegex = new Regex(REGEX_GROUP_END);
+                Regex newLineRegex = new Regex(REGEX_NEW_LINE);
+                Regex invalidRegex = new Regex(REGEX_INVALID);
 
-				}
-				reader.Close ();
-				if (list.Parent != null)
-					throw new PropertyException ("Missing closing curly brace.", list);
-				Properties = list.Root;
-			}
-		}
+                string allText = reader.ReadToEnd();
+                PropertyEntry previousValueEntry = null;
 
-		/// <summary>
-		/// Loads the list.
-		/// </summary>
-		/// <returns>The list.</returns>
-		/// <param name="reader">Reader.</param>
-		/// <param name="parent">Parent.</param>
-		protected PropertyList LoadList (string @line, PropertyList @parent) {
-			var braceIndex = @line.IndexOf ("{");
-			var commentIndex = @line.IndexOf ("#");
-			if (commentIndex < 0)
-				commentIndex = @line.Length;
+                while (!allText.IsNullEmptyOrWhite())
+                {
+                    PropertyEntry newEntry = null;
+                    string result = null;
+                    var groupStartGroups = groupStartRegex.Match(allText).Groups;
+                    if (groupStartGroups["r"].Success)
+                    {
+                        result = groupStartGroups["r"].Value;
+                        string key = groupStartGroups["k"].Value;
+                        string comment = groupStartGroups["c"].Value;
+                        var newList = new PropertyList(key, comment);
+                        newList.Parent = list;
+                        list = newList;
+                        previousValueEntry = null;
+                    }
+                    var keyValueGroups = keyValueRegex.Match(allText).Groups;
+                    if (result == null && keyValueGroups["r"].Success)
+                    {
+                        result = keyValueGroups["r"].Value;
+                        string key = keyValueGroups["k"].Value;
+                        string value = keyValueGroups["v"].Value;
+                        string comment = keyValueGroups["c"].Value;
+                        newEntry = new PropertyEntry(key, value, comment);
+                        previousValueEntry = newEntry;
+                    }
+                    var arrayValueGroups = arrayValueRegex.Match(allText).Groups;
+                    if (result == null && arrayValueGroups["r"].Success)
+                    {
+                        result = arrayValueGroups["r"].Value;
+                        string value = arrayValueGroups["v"].Value;
+                        string comment = arrayValueGroups["c"].Value;
+                        newEntry = new ArrayEntry(value, comment);
+                        previousValueEntry = newEntry;
+                    }
+                    var concatGroups = concatRegex.Match(allText).Groups;
+                    if (result == null && concatGroups["r"].Success)
+                    {
+                        if (previousValueEntry != null)
+                        {
+                            result = concatGroups["r"].Value;
+                            string value = concatGroups["v"].Value;
+                            string comment = concatGroups["c"].Value;
+                            if (previousValueEntry is ConcatenatedEntry)
+                            {
+                                (previousValueEntry as ConcatenatedEntry).AddConcat(value, comment);
+                            }
+                            else
+                            {
+                                list.RemoveEntry(previousValueEntry);
+                                newEntry = new ConcatenatedEntry(
+                                    previousValueEntry.Key, 
+                                    new string[]{ previousValueEntry.StringValue, value },
+                                    new string[]{ previousValueEntry.Comment, comment });
+                                newEntry.LineNumber = previousValueEntry.LineNumber;
+                                previousValueEntry = newEntry;
+                            }
+                        }
+                    }
+                    var blockCommentGroups = blockCommentRegex.Match(allText).Groups;
+                    if (result == null && blockCommentGroups["r"].Success)
+                    {
+                        result = blockCommentGroups["r"].Value;
+                        string comment = blockCommentGroups["c"].Value;
+                        newEntry = new BlockCommentEntry(comment);
+                    }
+                    var commentGroups = commentRegex.Match(allText).Groups;
+                    if (result == null && commentGroups["r"].Success)
+                    {
+                        result = commentGroups["r"].Value;
+                        string comment = commentGroups["c"].Value;
+                        newEntry = new CommentEntry(comment);
+                    }
+                    var groupEndGroups = groupEndRegex.Match(allText).Groups;
+                    if (result == null && groupEndGroups["r"].Success)
+                    {
+                        result = groupEndGroups["r"].Value;
+                        string comment = groupEndGroups["c"].Value;
+                        list.CloseComment = comment;
+                        list = list.Parent;
+                        previousValueEntry = null;
+                    }
+                    var newLineGroups = newLineRegex.Match(allText).Groups;
+                    if (result == null && newLineGroups["r"].Success)
+                    {
+                        result = newLineGroups["r"].Value;
+                        newEntry = new NewLineEntry();
+                    }
+                    var invalidGroups = invalidRegex.Match(allText).Groups;
+                    if (result == null)
+                    {
+                        result = invalidGroups["r"].Value;
+                    }
+                    if (newEntry != null)
+                    {
+                        if (newEntry.LineNumber == 0)
+                            newEntry.LineNumber = currentLineNumber;
+                        newEntry.Loaded = !CommentUnloadedEntries;
+                        list.AddEntry(newEntry);
+                    }
 
-			string key = @line.Substring (0, braceIndex - 1).Trim (' ', '\'');
-			string comment = string.Empty;
-			if (commentIndex + 1 < @line.Length)
-				comment = @line.Substring (commentIndex + 1).Trim ();
+                    currentLineNumber += Tools.Count('\n', result);
+                    allText = allText.Remove(0, result.Length);
+                }
+                if (list.Parent != null)
+                    throw new PropertyException("Missing closing curly brace.", list);
+                Properties = list.Root;
+            }
+        }
 
-			return new PropertyList (key, comment) {
-				Parent = @parent
-			};
-		}
-
-		/// <summary>
-		/// Loads the entry.
-		/// </summary>
-		/// <returns>The entry.</returns>
-		/// <param name="line">Line.</param>
-		protected PropertyEntry LoadEntry (string @line, PropertyList @parent) {
-			@line = @line.Replace (@"\#", "%$HASH$%");
-			var equalsIndex = @line.IndexOf ('=');
-			var commentIndex = @line.IndexOf ('#');
-			if (commentIndex < 0)
-				commentIndex = @line.Length;
-
-			string key = @line.Substring (0, equalsIndex - 1).Trim (' ', '\'');
-			string value = @line.Substring (equalsIndex + 1, commentIndex - equalsIndex - 1).Trim (' ', '\'')
-                .Replace ("%$HASH$%", "#");
-			string comment = string.Empty;
-			if (commentIndex + 1 < @line.Length)
-				comment = @line.Substring (commentIndex + 1).Trim ();
-
-			return new PropertyEntry (Tools.GetAlias (key, @parent.Keys), value, comment) {
-				Parent = @parent
-			};
-		}
-
-		/// <summary>
-		/// Loads the comment.
-		/// </summary>
-		/// <returns>The comment.</returns>
-		/// <param name="line">Line.</param>
-		protected PropertyEntry LoadComment (string @line, PropertyList @parent) {
-			string key = "#";
-			string value = @line.StartsWith ("#") ? @line.Substring (1).Trim () : @line;
-			string comment = string.Empty;
-
-			return new PropertyEntry (key, value, comment) {
-				Parent = @parent
-			};
-		}
-
-		/// <summary>
-		/// Loads the new line.
-		/// </summary>
-		/// <returns>The new line.</returns>
-		protected PropertyEntry LoadNewLine (PropertyList @parent) {
-			return new PropertyEntry (@"\n", string.Empty) {
-				Parent = @parent
-			};
-		}
-
-		/// <summary>
-		/// Save the config file with it's new values.
-		/// </summary>
-		public void Save () {
-			using (TextWriter writer = _fileInfo.CreateText ()) {
-				SaveList (writer, Properties);
-				writer.Close ();
-			}
-		}
-
-		/// <summary>
-		/// Saves the list.
-		/// </summary>
-		/// <param name="writer">Writer.</param>
-		/// <param name="list">List.</param>
-		protected void SaveList (TextWriter @writer, PropertyList @list) {
-			if (!string.IsNullOrEmpty (@list.Key)) {
-				if (!@list.Loaded)
-					writer.Write ("# ");
-				for (int i = 0; i < @list.IndentLevel && @list.Loaded; i++)
-					writer.Write ("    ");
-				writer.Write (@list.Key + " {");
-				if (!string.IsNullOrEmpty (@list.Comment))
-					writer.Write ("   # " + @list.Comment);
-				writer.WriteLine ();
-			}
-			foreach (var entry in @list.Entries) {
-				if (entry is PropertyList) {
-					SaveList (@writer, (PropertyList)entry);
-				}
-				else
-				if (!@list.Loaded) {
-					SaveComment (writer, entry);
-				}
-				else
-				if (entry.Key.Equals (@"\n")) {
-					SaveNewLine (writer);
-				}
-				else
-				if (entry.Key.Equals ("#") || !entry.Loaded) {
-					SaveComment (writer, entry);
-				}
-				else {
-					SaveEntry (writer, entry);
-				}
-			}
-			if (!string.IsNullOrEmpty (@list.Key)) {
-				if (!@list.Loaded)
-					writer.Write ("# ");
-				for (int i = 0; i < @list.IndentLevel && @list.Loaded; i++)
-					writer.Write ("    ");
-				writer.WriteLine ("}");
-			}
-		}
-
-		/// <summary>
-		/// Saves the entry.
-		/// </summary>
-		/// <param name="writer">Writer.</param>
-		/// <param name="entry">Entry.</param>
-		protected void SaveEntry (TextWriter @writer, PropertyEntry @entry) {
-			for (int i = 0; i < @entry.IndentLevel && @entry.Loaded; i++)
-				writer.Write ("    ");
-			var line = entry.Key + " = '" + entry.StringValue.Replace ("#", @"\#") + "'";
-			if (!entry.Comment.Equals (string.Empty))
-				line += "   # " + entry.Comment;
-			writer.WriteLine (line);
-		}
-
-		/// <summary>
-		/// Saves the comment.
-		/// </summary>
-		/// <param name="writer">Writer.</param>
-		/// <param name="entry">Entry.</param>
-		protected void SaveComment (TextWriter @writer, PropertyEntry @entry) {
-			for (int i = 0; i < @entry.IndentLevel && @entry.Loaded; i++)
-				writer.Write ("    ");
-			var comment = @entry.Key.Equals ("#") ? @entry.StringValue : @entry.ToString ();
-			var line = "# " + comment;
-			writer.WriteLine (line);
-		}
-
-		/// <summary>
-		/// Saves the new line.
-		/// </summary>
-		/// <param name="writer">Writer.</param>
-		protected void SaveNewLine (TextWriter @writer) {
-			@writer.WriteLine ();
-		}
-	}
+        /// <summary>
+        /// Save the config file with it's new values.
+        /// </summary>
+        public void Save()
+        {
+            if (Properties == null)
+                return;
+            
+            if (_fileInfo.Exists)
+                _fileInfo.Delete();
+            
+            using (StreamWriter writer = _fileInfo.CreateText())
+            {
+                writer.AutoFlush = true;
+                writer.Write(Properties.ToString());
+            }
+        }
+    }
 }
 
