@@ -17,11 +17,11 @@ namespace SMPL.Props
     public class PropertyFile
     {
 
-        public const string REGEX_GROUP_START = @"^(?'r'\s*\/\*[ \n]*(?'c'[\s\S]+?)[ \n]*\*\/[ \n]*)";
-        public const string REGEX_GROUP_END = @"^\s*}\s*";
+        public const string REGEX_GROUP_START = @"^(?'r'[ \n]*'?(?'k'[^\n]+?)'?[ \n]*{[ \n]*(?:(?:#|\/\/) *(?'c'.*?)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
+        public const string REGEX_GROUP_END = @"^(?'r'\s*\}[ \n]*(?:(?:#|\/\/) *(?'c'.*?)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
         public const string REGEX_KEY_VALUE = @"^(?'r'\s*'?(?'k'.+?)'?[ \n]*=[ \n]*'?(?'v'.+?)'?[ \n]*(?:(?:#|\/\/) *(?'c'.*?)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
         public const string REGEX_ARRAY_VALUE = @"^(?'r'\s*-[ \n]*'(?'v'.+?)'?[ \n]*(?:(?:#|\/\/) *(?'c'.*)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
-        public const string REGEX_COMMENT = @"^(?'r'\s*(?:#|\/\/) *(?'c'.*?))";
+        public const string REGEX_COMMENT = @"^(?'r'\s*(?:#|\/\/) *(?'c'.*))";
         public const string REGEX_BLOCK_COMMENT = @"^(?'r'\s*\/\*[ \n]*(?'c'[\s\S]+?)[ \n]*\*\/[ \n]*)";
         public const string REGEX_CONCAT = @"^(?'r'\s*\+[ \n]*'?(?'v'.+?)'?[ \n]*(?:(?:#|\/\/) *(?'c'.*?)[ \n]*)?)(?:\n|'.+?'[ \n]*\{|\/\*|'.+'[ \n]*=|-[ \n]*'|\})";
         public const string REGEX_NEW_LINE = @"(?<=\n)[ ]*(?'r'\n)";
@@ -82,25 +82,29 @@ namespace SMPL.Props
         /// </summary>
         public void Load()
         {
-            if (!_fileInfo.Exists)
+            if (!File.Exists(_fileInfo.FullName))
                 _fileInfo.Create().Close();
             using (TextReader reader = _fileInfo.OpenText())
             {
-
                 var list = new PropertyList(string.Empty);
                 list.Loaded = true;
 
                 Regex groupStartRegex = new Regex(REGEX_GROUP_START);
                 Regex keyValueRegex = new Regex(REGEX_KEY_VALUE);
                 Regex arrayValueRegex = new Regex(REGEX_ARRAY_VALUE);
-                Regex blockCommentRegex = new Regex(REGEX_COMMENT);
+                Regex blockCommentRegex = new Regex(REGEX_BLOCK_COMMENT);
                 Regex commentRegex = new Regex(REGEX_COMMENT);
                 Regex concatRegex = new Regex(REGEX_CONCAT);
                 Regex groupEndRegex = new Regex(REGEX_GROUP_END);
                 Regex newLineRegex = new Regex(REGEX_NEW_LINE);
                 Regex invalidRegex = new Regex(REGEX_INVALID);
 
+
                 string allText = reader.ReadToEnd();
+                if (!allText.EndsWith("\n"))
+                {
+                    allText = allText + "\n";
+                }
                 PropertyEntry previousValueEntry = null;
 
                 while (!allText.IsNullEmptyOrWhite())
@@ -113,9 +117,10 @@ namespace SMPL.Props
                         result = groupStartGroups["r"].Value;
                         string key = groupStartGroups["k"].Value;
                         string comment = groupStartGroups["c"].Value;
-                        var newList = new PropertyList(key, comment);
-                        newList.Parent = list;
-                        list = newList;
+                        newEntry = new PropertyList(key, comment);
+                        newEntry.Parent = list;
+                        list.AddEntry(newEntry);
+                        list = newEntry as PropertyList;
                         previousValueEntry = null;
                     }
                     var keyValueGroups = keyValueRegex.Match(allText).Groups;
@@ -151,7 +156,7 @@ namespace SMPL.Props
                             }
                             else
                             {
-                                list.RemoveEntry(previousValueEntry);
+                                list.Remove(previousValueEntry);
                                 newEntry = new ConcatenatedEntry(
                                     previousValueEntry.Key, 
                                     new string[]{ previousValueEntry.StringValue, value },
@@ -200,7 +205,8 @@ namespace SMPL.Props
                         if (newEntry.LineNumber == 0)
                             newEntry.LineNumber = currentLineNumber;
                         newEntry.Loaded = !CommentUnloadedEntries;
-                        list.AddEntry(newEntry);
+                        if (list != newEntry)
+                            list.AddEntry(newEntry);
                     }
 
                     currentLineNumber += Tools.Count('\n', result);
@@ -228,6 +234,12 @@ namespace SMPL.Props
                 writer.AutoFlush = true;
                 writer.Write(Properties.ToString());
             }
+        }
+
+        public void Delete()
+        {
+            if (File.Exists(_fileInfo.FullName))
+                _fileInfo.Delete();
         }
     }
 }

@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace SMPL.Props
 {
@@ -69,9 +70,7 @@ namespace SMPL.Props
         /// <summary>
         /// Initializes a new instance of the <see cref="SimplifiedProperties.PropertyList"/> class.
         /// </summary>
-        /// <param name="file">File.</param>
         /// <param name="key">Key.</param>
-        /// <param name="value">Value.</param>
         public PropertyList(string key)
             : this(key, string.Empty)
         {
@@ -80,15 +79,83 @@ namespace SMPL.Props
         /// <summary>
         /// Initializes a new instance of the <see cref="SimplifiedProperties.PropertyList"/> class.
         /// </summary>
-        /// <param name="file">File.</param>
         /// <param name="key">Key.</param>
-        /// <param name="value">Value.</param>
         /// <param name="comment">Comment.</param>
         public PropertyList(string key, string comment)
+            : this(key, comment, null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SimplifiedProperties.PropertyList"/> class.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        /// <param name="comment">Comment.</param>
+        /// <param name="closeComment">The comment on the closing curly brace.</param>
+        public PropertyList(string key, string comment, string closeComment)
             : base(key, string.Empty, comment)
         {
+            CloseComment = closeComment;
             _keys = new List<string>();
             _entries = new List<PropertyEntry>();
+        }
+
+        /// <summary>
+        /// Gets or sets the <see cref="SMPL.Props.PropertyList"/> with the specified Key.
+        /// </summary>
+        /// <param name="Key">Key.</param>
+        public PropertyEntry this [string Key]
+        {
+            get
+            {
+                return GetEntry(Key);
+            }
+            set
+            {
+                if (value == null)
+                {
+                    Remove(Key);
+                    return;
+                }
+                if (!Contains(value.Key))
+                {
+                    AddEntry(value);
+                }
+                else
+                {
+                    int index = IndexOf(value.Key);
+                    SetAt(index, value);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the <see cref="SMPL.Props.PropertyList"/> at the specified index.
+        /// </summary>
+        /// <param name="index">The index.</param>
+        public PropertyEntry this [int index]
+        {
+            get
+            {
+                if (index >= Count || index < 0)
+                {
+                    return null;
+                }
+                return _entries[index];
+            }
+            set
+            {
+                if (index >= Count || index < 0)
+                {
+                    throw new IndexOutOfRangeException();
+                }
+                if (value == null)
+                {
+                    RemoveAt(index);
+                    return;
+                }
+                _entries[index] = value;
+            }
         }
 
         /// <summary>
@@ -100,7 +167,7 @@ namespace SMPL.Props
         /// <param name="defaultValue">Value.</param>
         /// <param name="comment">Comment.</param>
         /// <typeparam name="T">The 1st type parameter.</typeparam>
-        public void NewEntry<T>(string key, T defaultValue, string comment)
+        public void Add<T>(string key, T defaultValue, string comment)
         {
             AddEntry(new PropertyEntry(key, 
                     defaultValue == null
@@ -112,9 +179,9 @@ namespace SMPL.Props
         /// Adds a new array entry to the list.
         /// </summary>
         /// <param name="value">The value.</param>
-        public void AddArrayEntry<T>(T value)
+        public void AddArrayValue<T>(T value)
         {
-            AddArrayEntry(value, null);
+            AddArrayValue(value, null);
         }
 
         /// <summary>
@@ -122,7 +189,7 @@ namespace SMPL.Props
         /// </summary>
         /// <param name="value">The value.</param>
         /// <param name="comment">The comment.</param>
-        public void AddArrayEntry<T>(T value, string comment)
+        public void AddArrayValue<T>(T value, string comment)
         {
             AddEntry(new ArrayEntry(value + "", comment));
         }
@@ -132,7 +199,20 @@ namespace SMPL.Props
         /// </summary>
         public void NewLine()
         {
-            AddEntry(new NewLineEntry(){ Loaded = true });
+            var nextEntryToLoad = this[_lastLoadedIndex + 1];
+            if (nextEntryToLoad != null)
+            {
+                if (nextEntryToLoad is NewLineEntry)
+                {
+                    nextEntryToLoad.Loaded = true;
+                    _lastLoadedIndex++;
+                }
+            }
+            else
+            {
+                
+            }
+//                AddEntry(new NewLineEntry(){ Loaded = true });
         }
 
         /// <summary>
@@ -172,6 +252,15 @@ namespace SMPL.Props
         }
 
         /// <summary>
+        /// Finds the index of an entry by key.
+        /// </summary>
+        /// <param name="key">The key.</param>
+        public int IndexOf(string key)
+        {
+            return _keys.IndexOf(key);
+        }
+
+        /// <summary>
         /// Finds the index of an entry.
         /// </summary>
         /// <param name="entry">The entry.</param>
@@ -189,7 +278,7 @@ namespace SMPL.Props
         {
             PropertyEntry entry = null;
 
-            for (int i = 0; i < _keys.Count; i++)
+            for (int i = 0; i < Count; i++)
             {
                 var eachEntry = _entries[i];
                 if (_keys[i].Equals(key)
@@ -209,9 +298,9 @@ namespace SMPL.Props
         /// </summary>
         /// <param name="index">Index.</param>
         /// <param name="entry">Entry.</param>
-        public bool SetEntryAt(int index, PropertyEntry entry)
+        public bool SetAt(int index, PropertyEntry entry)
         {
-            if (index < 0 || index > _entries.Count)
+            if (index < 0 || index > Count)
                 return false;
             _keys[index] = entry.Key;
             _entries[index] = entry;
@@ -220,13 +309,33 @@ namespace SMPL.Props
         }
 
         /// <summary>
+        /// Inserts an entry at an index.
+        /// Returns true if successful.
+        /// </summary>
+        /// <param name="index">The index.</param>
+        /// <param name="entry">The entry.</param>
+        public bool InsertAt(int index, PropertyEntry entry)
+        {
+            if (entry == null)
+                return false;
+            // Note that the index can be at Count.
+            if (index > Count || index < 0)
+                return false;
+            if (Contains(entry.Key))
+                return false;
+            _keys.Insert(index, entry.Key);
+            _entries.Insert(index, entry);
+            return true;
+        }
+
+        /// <summary>
         /// Removes an entry from the list using it's key.
         /// </summary>
         /// <returns>The entry.</returns>
         /// <param name="key">Key.</param>
-        public PropertyEntry RemoveEntry(string key)
+        public PropertyEntry Remove(string key)
         {
-            return RemoveEntry(GetEntry(key));
+            return Remove(GetEntry(key));
         }
 
         /// <summary>
@@ -234,13 +343,28 @@ namespace SMPL.Props
         /// </summary>
         /// <returns>The entry.</returns>
         /// <param name="entry">Entry.</param>
-        public PropertyEntry RemoveEntry(PropertyEntry entry)
+        public PropertyEntry Remove(PropertyEntry entry)
         {
             if (entry == null)
                 return null;
             int index = IndexOf(entry);
+            return RemoveAt(index);
+        }
+
+        /// <summary>
+        /// Removes an entry at the specified index.
+        /// </summary>
+        /// <param name="index"></param>
+        public PropertyEntry RemoveAt(int index)
+        {
+            if (index >= _entries.Count || index < 0)
+            {
+                return null;
+            }
+            var entry = _entries[index];
             _keys.RemoveAt(index);
             _entries.RemoveAt(index);
+            Modified = true;
             return entry;
         }
 
@@ -249,9 +373,9 @@ namespace SMPL.Props
         /// </summary>
         /// <param name="key">The key.</param>
         /// <param name="defaultValue">The default value.</param>
-        public PropertyEntry GetOrCreateEntry(string key, object defaultValue)
+        public PropertyEntry Get(string key, object defaultValue)
         {
-            return GetOrCreateEntry(key, defaultValue, string.Empty);
+            return Get(key, defaultValue, string.Empty);
         }
 
         /// <summary>
@@ -260,7 +384,7 @@ namespace SMPL.Props
         /// <param name="key">The key.</param>
         /// <param name="defaultValue">The default value.</param>
         /// <param name="comment">The comment for the entry.</param>
-        public PropertyEntry GetOrCreateEntry(string key, object defaultValue, string comment)
+        public PropertyEntry Get(string key, object defaultValue, string comment)
         {
             PropertyEntry entry;
             if (Contains(key))
@@ -281,9 +405,9 @@ namespace SMPL.Props
         /// <param name="key">The key.</param>
         /// <param name="newValue">The new value.</param>
         /// <param name="comment">The comment for the entry.</param>
-        public PropertyEntry SetOrCreateEntry(string key, object newValue)
+        public PropertyEntry Set(string key, object newValue)
         {
-            return SetOrCreateEntry(key, newValue, string.Empty);
+            return Set(key, newValue, string.Empty);
         }
 
         /// <summary>
@@ -292,7 +416,7 @@ namespace SMPL.Props
         /// <param name="key">The key.</param>
         /// <param name="newValue">The new value.</param>
         /// <param name="comment">The comment for the entry.</param>
-        public PropertyEntry SetOrCreateEntry(string key, object newValue, string comment)
+        public PropertyEntry Set(string key, object newValue, string comment)
         {
             PropertyEntry entry;
             if (Contains(key))
@@ -314,9 +438,9 @@ namespace SMPL.Props
         /// </summary>
         /// <param name="key">The key.</param>
         /// <param name="defaultValue">The default value.</param>
-        public T LoadEntry<T>(string key, T defaultValue)
+        public T Load<T>(string key, T defaultValue)
         {
-            return LoadEntry<T>(key, defaultValue, string.Empty);
+            return Load<T>(key, defaultValue, string.Empty);
         }
 
         /// <summary>
@@ -326,9 +450,9 @@ namespace SMPL.Props
         /// <param name="key">The key.</param>
         /// <param name="defaultValue">The default value.</param>
         /// <param name="comment">The comment for the entry.</param>
-        public T LoadEntry<T>(string key, T defaultValue, string comment)
+        public T Load<T>(string key, T defaultValue, string comment)
         {
-            var entry = GetOrCreateEntry(key, defaultValue, comment);
+            var entry = Get(key, defaultValue, comment);
             entry.Loaded = true;
             return entry.GetValue<T>();
         }
@@ -355,8 +479,8 @@ namespace SMPL.Props
         }
 
         /// <summary>
-        /// Loads an array of values from the list. This will only load values
-        /// that can be parsed to the specified type.
+        /// Loads an array of values from the list and marks them as loaded. 
+        /// This will only return values that can be parsed to the specified type.
         /// </summary>
         public T[] LoadArray<T>()
         {
@@ -367,13 +491,43 @@ namespace SMPL.Props
                 var entry = _entries[i] as ArrayEntry;
                 if (entry == null)
                     continue;
-                
+
                 T val;
                 if (!entry.TryGetValue(out val))
                     continue;
-                
+
                 values[addIndex] = val;
                 entry.Loaded = true;
+
+                addIndex++;
+            }
+
+            if (addIndex < _entries.Count)
+            {
+                Array.Resize(ref values, addIndex);
+            }
+            return values;
+        }
+
+        /// <summary>
+        /// Loads an array of values from the list. This will only return values
+        /// that can be parsed to the specified type.
+        /// </summary>
+        public T[] GetArray<T>()
+        {
+            T[] values = new T[_entries.Count];
+            int addIndex = 0;
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var entry = _entries[i] as ArrayEntry;
+                if (entry == null)
+                    continue;
+
+                T val;
+                if (!entry.TryGetValue(out val))
+                    continue;
+
+                values[addIndex] = val;
 
                 addIndex++;
             }
@@ -452,11 +606,22 @@ namespace SMPL.Props
         /// <param name="comment">Comment.</param>
         public PropertyList GetOrCreateList(string key, string comment)
         {
+            return GetOrCreateList(key, comment, null);
+        }
+
+        /// <summary>
+        /// Gets/Creates a list.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        /// <param name="comment">Comment.</param>
+        /// <param name="closeComment">The comment on the closing curly brace.</param>
+        public PropertyList GetOrCreateList(string key, string comment, string closeComment)
+        {
             PropertyList list = GetList(key);
 
             if (list == null)
             {
-                list = new PropertyList(key, comment);
+                list = new PropertyList(key, comment, closeComment);
                 AddEntry(list);
             }
 
@@ -479,7 +644,18 @@ namespace SMPL.Props
         /// <param name="comment">Comment.</param>
         public PropertyList LoadList(string key, string comment)
         {
-            PropertyList list = GetOrCreateList(key, comment);
+            return LoadList(key, comment, null);
+        }
+
+        /// <summary>
+        /// Gets/Creates a list and marks it as loaded.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        /// <param name="comment">Comment.</param>
+        /// <param name="closeComment">The comment on the closing curly brace.</param>
+        public PropertyList LoadList(string key, string comment, string closeComment)
+        {
+            PropertyList list = GetOrCreateList(key, comment, closeComment);
 
             list.Loaded = true;
 
@@ -498,9 +674,10 @@ namespace SMPL.Props
                 }
                 sb.AppendLine();
             }
-            for (int i = 0; i < _entries.Count; i++)
+            var sortedEntries = _entries.OrderBy(e => e.Loaded).ToList();
+            for (int i = 0; i < sortedEntries.Count; i++)
             {
-                var entry = _entries[i];
+                var entry = sortedEntries[i];
                 sb.AppendLine(entry.ToString());
             }
             for (int i = 0; i < IndentLevel; i++)

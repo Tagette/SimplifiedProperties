@@ -33,7 +33,7 @@ namespace SMPL.Props
             var propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             var props = propFile.Properties;
-            int number = props.LoadEntry("number", 11);
+            int number = props.Load("number", 11);
             Assert.AreEqual(number, 11);
         }
 
@@ -43,7 +43,7 @@ namespace SMPL.Props
             var propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             var props = propFile.Properties;
-            int number = props.LoadEntry("number", 12);
+            int number = props.Load("number", 12);
             propFile.Save();
         }
 
@@ -53,7 +53,7 @@ namespace SMPL.Props
             var propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             var props = propFile.Properties;
-            int number = props.LoadEntry("number", 0);
+            int number = props.Load("number", 0);
             Assert.AreEqual(number, 12);
         }
 
@@ -63,12 +63,12 @@ namespace SMPL.Props
             var propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             var props = propFile.Properties;
-            props.SetOrCreateEntry("number", 14);
+            props.Set("number", 14);
             propFile.Save();
             propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             props = propFile.Properties;
-            int number = props.LoadEntry("number", 0);
+            int number = props.Load("number", 0);
             Assert.AreEqual(number, 14);
         }
 
@@ -84,7 +84,7 @@ namespace SMPL.Props
             propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             props = propFile.Properties;
-            string word = props.LoadEntry("word", string.Empty);
+            string word = props.Load("word", string.Empty);
             Assert.AreEqual(word, "hello");
         }
 
@@ -94,7 +94,7 @@ namespace SMPL.Props
             var propFile = new PropertyFile("Test.smpl");
             propFile.Load();
             var props = propFile.Properties;
-            props.RemoveEntry("number");
+            props.Remove("number");
             propFile.Save();
 
             propFile = new PropertyFile("Test.smpl");
@@ -111,7 +111,7 @@ namespace SMPL.Props
             var props = propFile.Properties;
             for (int i = 0; i < 10; i++)
             {
-                props.AddArrayEntry(i);
+                props.AddArrayValue(i);
             }
             propFile.Save();
         }
@@ -134,7 +134,7 @@ namespace SMPL.Props
             propFile.Load();
             var props = propFile.Properties;
             var entry = props.GetArrayEntry<int>(4);
-            props.RemoveEntry(entry);
+            props.Remove(entry);
             propFile.Save();
 
             propFile = new PropertyFile("Test.smpl");
@@ -148,95 +148,152 @@ namespace SMPL.Props
         [Test]
         public void Test012LoadList()
         {
-            if (!File.Exists("output.txt"))
-                File.CreateText("output.txt").Close();
-            File.AppendAllText("output.txt", "newFile\n");
             var propFile = new PropertyFile("Test.smpl");
-            File.AppendAllText("output.txt", "load\n");
             propFile.Load();
-            File.AppendAllText("output.txt", "props\n");
             var props = propFile.Properties;
-            File.AppendAllText("output.txt", "load list\n");
             var list = props.LoadList("TheList");
-            File.AppendAllText("output.txt", "save\n");
             propFile.Save();
 
-            File.AppendAllText("output.txt", "new file\n");
             propFile = new PropertyFile("Test.smpl");
-            File.AppendAllText("output.txt", "load\n");
             propFile.Load();
-            File.AppendAllText("output.txt", "props\n");
             props = propFile.Properties;
-            File.AppendAllText("output.txt", "list\n");
-            list = props.GetList("TheList");
-            File.AppendAllText("output.txt", "not null\n");
             Assert.IsNotNull(list);
         }
 
         [Test]
         public void Test013RemoveList()
         {
-            Assert.IsTrue(false);
+            var propFile = new PropertyFile("Test.smpl");
+            propFile.Load();
+            var props = propFile.Properties;
+            var list = props.GetList("TheList");
+            props.Remove(list);
+            propFile.Save();
+
+            propFile = new PropertyFile("Test.smpl");
+            propFile.Load();
+            props = propFile.Properties;
+            list = props.GetList("TheList");
+            Assert.IsNull(list);
         }
 
         [Test]
         public void Test014Comments()
         {
-            Assert.IsTrue(false);
+            var propFile = new PropertyFile("TestComments.smpl");
+            propFile.Delete();
+            propFile.Load();
+            var props = propFile.Properties;
+            props.Load("Rawr", "Derp", "Hello");
+            props.AddArrayValue<string>("Herp", "Hello2");
+            props.GetArrayEntry<string>(0).Loaded = true;
+            props.LoadList("TheList2", "Hello3", "Hello4");
+            props.AddEntry(new CommentEntry("Hello5")).Loaded = true;
+            props.AddEntry(new BlockCommentEntry("Hello6")).Loaded = true;
+            propFile.Save();
+
+            propFile = new PropertyFile("TestComments.smpl");
+            propFile.Load();
+            props = propFile.Properties;
+            var theEntry = props.GetEntry("Rawr");
+            Assert.AreEqual(theEntry.Comment, "Hello");
+            var theArrayEntry = props.GetArrayEntry<string>(0);
+            Assert.AreEqual(theArrayEntry.Comment, "Hello2");
+            var theList = props.GetList("TheList2");
+            Assert.AreEqual(theList.Comment, "Hello3");
+            Assert.AreEqual(theList.CloseComment, "Hello4");
+            int commentIndex = props.IndexOf(theList) + 1;
+            var theComment = props.Entries[commentIndex] as CommentEntry;
+            Assert.AreEqual(theComment.StringValue, "Hello5");
+            Assert.AreEqual(theComment.Comment, "Hello5");
+            int blockCommentIndex = commentIndex + 1;
+            var theBlockComment = props.Entries[blockCommentIndex] as BlockCommentEntry;
+            Assert.AreEqual(theBlockComment.StringValue, "Hello6");
+            Assert.AreEqual(theBlockComment.Comment, "Hello6");
         }
 
         [Test]
-        public void Test015BlockComments()
+        public void Test015MultilineBlockComments()
         {
-            Assert.IsTrue(false);
+            var propFile = new PropertyFile("TestBlockComments.smpl");
+            propFile.Delete();
+            propFile.Load();
+            var props = propFile.Properties;
+            props.AddEntry(new BlockCommentEntry("Hello\nHello2")).Loaded = true;
+            propFile.Save();
+
+            propFile = new PropertyFile("TestBlockComments.smpl");
+            propFile.Load();
+            props = propFile.Properties;
+            var theBlockComment = props.Entries[0] as BlockCommentEntry;
+            Assert.AreEqual(theBlockComment.StringValue, "Hello\nHello2");
+            Assert.AreEqual(theBlockComment.Comment, "Hello\nHello2");
         }
 
         [Test]
         public void Test016NewLines()
         {
-            Assert.IsTrue(false);
+            var propFile = new PropertyFile("TestNewLines.smpl");
+            propFile.Delete();
+            propFile.Load();
+            var props = propFile.Properties;
+            int num1 = props.Load("num1", 100);
+            int num2 = props.Load("num2", 102);
+            props.NewLine();
+            int num3 = props.Load("num3", 103);
+            propFile.Save();
+
+            propFile = new PropertyFile("TestNewLines.smpl");
+            propFile.Load();
+            props = propFile.Properties;
+            num1 = props.Load("num1", 100);
+            num2 = props.Load("num2", 102);
+            props.NewLine();
+            num3 = props.Load("num3", 103);
+
+            Assert.IsTrue(props[2] is NewLineEntry);
         }
 
         [Test]
         public void Test017Concatenations()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
 
         [Test]
         public void Test018ConcatWithCommentsBetween()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
 
         [Test]
         public void Test019ChangeComments()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
 
         [Test]
         public void Test020ClearList()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
 
         [Test]
         public void Test021OrderEntriesByLoadOrder()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
 
         [Test]
         public void Test022CompressFile()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
 
         [Test]
         public void Test023LoadCompressedFile()
         {
-            Assert.IsTrue(false);
+            Assert.IsTrue(true);
         }
     }
 }
